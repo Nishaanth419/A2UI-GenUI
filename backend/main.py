@@ -6,7 +6,7 @@ messages that `@a2ui/react` renders directly. Every turn re-composes ONE fixed
 surface: the client deletes it, the stream re-creates the same id, and the
 dashboard re-forms in place rather than stacking answer under answer.
 
-The stream never raises to the client: a missing API key, an OpenAI error or a
+The stream never raises to the client: a missing API key, a Groq error or a
 schema violation all resolve to a `text_note` block, so the renderer is never
 handed a surface it cannot draw.
 """
@@ -25,7 +25,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # Importing the api package pulls in agent.prompts, which renders the dataset
-# into the system prompt once -- after load_dotenv so OPENAI_MODEL is honored.
+# into the system prompt once -- after load_dotenv so GROQ_MODEL is honored.
 from api import api_router  # noqa: E402
 
 ALLOWED_ORIGINS = os.getenv(

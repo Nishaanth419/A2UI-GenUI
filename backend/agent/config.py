@@ -1,4 +1,4 @@
-"""Model selection, follow-up limits, and the lazily-built OpenAI client."""
+"""Groq model configuration via its OpenAI-compatible API."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ import os
 
 from openai import OpenAI
 
-MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 MAX_FOLLOW_UPS = 3
 MAX_FOLLOW_UP_CHARS = 70
@@ -21,8 +22,11 @@ _client: OpenAI | None = None
 
 
 def get_client() -> OpenAI:
-    """Lazily build the OpenAI client so the app still boots without a key."""
+    """Build an OpenAI-compatible client for Groq only when it is needed."""
     global _client
     if _client is None:
-        _client = OpenAI()  # reads OPENAI_API_KEY from the environment
+        _client = OpenAI(
+            api_key=os.getenv("GROQ_API_KEY"),
+            base_url=GROQ_BASE_URL,
+        )
     return _client

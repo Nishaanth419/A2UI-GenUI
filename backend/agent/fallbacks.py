@@ -18,7 +18,7 @@ from schemas import ErrorCode
 FALLBACK_COPY: dict[ErrorCode, tuple[str, str]] = {
     "missing_api_key": (
         "Missing API key",
-        "Set OPENAI_API_KEY in the server's environment and restart it, then try again. "
+        "Set GROQ_API_KEY in the server's environment and restart it, then try again. "
         "Locally that is backend/.env; under Docker it is the .env next to compose.yaml.",
     ),
     "schema_validation_failed": (

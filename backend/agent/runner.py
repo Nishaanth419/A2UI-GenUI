@@ -1,28 +1,21 @@
 """The streaming loop: free-text in, a stream of A2UI v0.9 events out.
 
-Generation is streamed twice over, deliberately:
-
-* **Optimistically**, from the model's partially-parsed JSON. As soon as one
-  block is provably finished, its data and components are emitted, so the
-  first card appears while the model is still writing the third. This is what
-  makes the interface build in front of the user instead of arriving whole.
-* **Authoritatively**, once the stream closes. The completed object is
-  validated and sanitised, then the full data model and component tree are
-  re-sent. `updateDataModel` replaces, so a block that the optimistic pass got
-  wrong (or skipped) is corrected before the user can act on it.
+Groq's GPT-OSS structured-output endpoint does not support response streaming,
+so the model is asked for one strict JSON-schema completion. Once it arrives,
+the resulting A2UI messages are still streamed over SSE to the browser.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Generator, Iterator
+from typing import Any, Iterator
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 
 import a2ui
 from agent.config import MODEL, get_client
-from agent.emit import emit_blocks, emit_one_block
+from agent.emit import emit_blocks
 from agent.events import Event
 from agent.fallbacks import fallback
 from agent.follow_ups import clean_follow_ups
@@ -31,7 +24,29 @@ from schemas import AgentTurn, Block, Turn
 
 logger = logging.getLogger("genui.agent")
 
-_block_adapter: TypeAdapter[Block] = TypeAdapter(Block)
+
+def _groq_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Make a Pydantic schema valid for Groq's strict JSON Schema mode.
+
+    Groq requires every object node, including nested definitions under
+    ``$defs``, to explicitly forbid undeclared properties. Pydantic's default
+    schema leaves that unconstrained, so normalise the generated schema at the
+    provider boundary rather than duplicating provider-specific config across
+    every model in ``schemas/``.
+    """
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "object":
+                value["additionalProperties"] = False
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    normalised = schema.copy()
+    visit(normalised)
+    return normalised
 
 
 def _messages(message: str, history: list[Turn]) -> list[dict]:
@@ -43,78 +58,28 @@ def _messages(message: str, history: list[Turn]) -> list[dict]:
     ]
 
 
-def _parse_partial_block(raw: Any) -> Block | None:
-    """Validate one block out of a partially-streamed object.
-
-    `raw` is `Any` because it comes from the SDK's partial-parse snapshot: at
-    this point in the stream it may be a half-built dict, a scalar, or absent
-    entirely, and narrowing it is exactly this function's job.
-
-    Returns:
-        The sanitised block, or None if it is not yet whole -- in which case the
-        authoritative pass emits it properly a moment later.
-    """
-    if not isinstance(raw, dict) or not raw.get("type"):
-        return None
-    candidate = dict(raw)
-    candidate.setdefault("actions", [])
-    try:
-        return a2ui.sanitize(_block_adapter.validate_python(candidate))
-    except (ValidationError, ValueError):
-        return None
-
-
-def _generate(
-    message: str, history: list[Turn], surface_id: str
-) -> Generator[Event, None, AgentTurn]:
-    """Stream the model, emitting blocks optimistically; return the whole turn.
-
-    Args:
-        message: The user's request for this turn.
-        history: Prior turns, replayed so pronouns resolve.
-        surface_id: The surface these blocks belong to.
-
-    Returns:
-        The completed, validated turn, for the caller's authoritative pass.
-
-    Raises:
-        ValueError: If the model refused, or returned nothing parseable.
-    """
-    emitted = 0
-    blocks: list[Block] = []
-
-    with get_client().beta.chat.completions.stream(
+def _generate(message: str, history: list[Turn]) -> AgentTurn:
+    """Request and validate one strict JSON-schema completion from Groq."""
+    completion = get_client().chat.completions.create(
         model=MODEL,
         messages=_messages(message, history),
-        response_format=AgentTurn,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "agent_turn",
+                "strict": True,
+                "schema": _groq_strict_schema(AgentTurn.model_json_schema()),
+            },
+        },
         temperature=0.2,
-    ) as stream:
-        for event in stream:
-            if event.type != "content.delta" or not event.parsed:
-                continue
-
-            raw_blocks = event.parsed.get("blocks")
-            if not isinstance(raw_blocks, list):
-                continue
-
-            # A block is only provably finished once the next one has started,
-            # so the last one in the snapshot is always left to the caller.
-            for index in range(emitted, len(raw_blocks) - 1):
-                block = _parse_partial_block(raw_blocks[index])
-                if block is None:
-                    break
-                blocks.append(block)
-                emitted = index + 1
-                yield from emit_one_block(surface_id, blocks, index)
-
-        completion = stream.get_final_completion()
+    )
 
     choice = completion.choices[0]
     if choice.message.refusal:
         raise ValueError(f"model refused: {choice.message.refusal}")
-    if choice.message.parsed is None:
+    if choice.message.content is None:
         raise ValueError("model returned no parseable output")
-    return choice.message.parsed
+    return AgentTurn.model_validate_json(choice.message.content)
 
 
 def _usable_blocks(blocks: list[Block]) -> list[Block]:
@@ -137,12 +102,12 @@ def run(message: str, history: list[Turn], surface_id: str) -> Iterator[Event]:
     yield Event("a2ui", a2ui.create_surface(surface_id))
     yield Event("a2ui", a2ui.update_data_model(surface_id, "/", {"blocks": []}))
 
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("GROQ_API_KEY"):
         yield from fallback(surface_id, "missing_api_key")
         return
 
     try:
-        turn = yield from _generate(message, history, surface_id)
+        turn = _generate(message, history)
     except ValidationError as exc:
         logger.warning("model output failed validation: %s", exc)
         yield from fallback(surface_id, "schema_validation_failed")

@@ -8,6 +8,6 @@ from pydantic import BaseModel
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     model: str
-    openai_key_set: bool
+    provider_key_set: bool
     protocol: str
     catalog_id: str

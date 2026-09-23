@@ -1,7 +1,7 @@
 """The component catalog, as the agent thinks about it — one class per module.
 
 These Pydantic models constrain what the LLM is allowed to emit: they become
-the JSON Schema passed to OpenAI as `response_format`, and they validate the
+the JSON Schema passed to Groq as `response_format`, and they validate the
 result before anything is compiled to A2UI.
 
 This is deliberately NOT the A2UI wire format. A2UI messages are a flat,

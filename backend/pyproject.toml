@@ -5,7 +5,7 @@
 [project]
 name = "genui-backend"
 version = "2.0.0"
-description = "Generative UI backend speaking A2UI v0.9 — FastAPI + OpenAI structured outputs"
+description = "Generative UI backend speaking A2UI v0.9 — FastAPI + Groq structured outputs"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
