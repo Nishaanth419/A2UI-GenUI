@@ -3,8 +3,8 @@ services:
     build: ./backend
     environment:
       # Compose substitutes these from the .env file next to this compose file.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
       # nginx proxies /api, so the browser only ever makes same-origin
       # requests. This is here for anyone hitting the backend port directly.
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
@@ -13,7 +13,13 @@ services:
       - "8000:8000"
     healthcheck:
       # The image has no curl, and adding one just for this is not worth a layer.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health').read()"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health').read()",
+        ]
       interval: 5s
       timeout: 3s
       retries: 10

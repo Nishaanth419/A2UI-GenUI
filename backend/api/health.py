@@ -15,7 +15,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         model=agent.MODEL,
-        openai_key_set=bool(os.getenv("OPENAI_API_KEY")),
+        provider_key_set=bool(os.getenv("GROQ_API_KEY")),
         protocol=a2ui.VERSION,
         catalog_id=a2ui.CATALOG_ID,
     )

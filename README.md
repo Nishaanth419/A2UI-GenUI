@@ -14,13 +14,11 @@ Browser                                    FastAPI
   │  POST /api/generate {session_id, message}
   │─────────────────────────────────────────▶│
   │                                          ├─ replay conversation history
-  │                                          ├─ OpenAI structured outputs
+  │                                          ├─ Groq structured outputs
   │                                          │    schema = the block catalog
   │◀── SSE: createSurface ────────────────────┤
-  │◀── SSE: updateDataModel /blocks/0 ────────┤  optimistic: as each block
-  │◀── SSE: updateComponents ─────────────────┤  finishes streaming
-  │◀── SSE: updateDataModel / ────────────────┤  authoritative: validated
-  │◀── SSE: updateComponents ─────────────────┤  and sanitised
+  │◀── SSE: updateDataModel / ────────────────┤  validated and sanitised
+  │◀── SSE: updateComponents ─────────────────┤  complete component tree
   │                                          │
   │  POST /api/action {name, context}         │  user pressed a generated
   │─────────────────────────────────────────▶│  button — same loop again
@@ -68,7 +66,7 @@ agent's internal planning step is typed.
 
 This is a deliberate deviation. A2UI messages are a flat, loosely-typed
 component stream: ideal for a renderer, hostile to schema-constrained
-generation. Compiling from a typed plan keeps OpenAI structured outputs in the
+generation. Compiling from a typed plan keeps Groq structured outputs in the
 loop, which means the model **cannot** emit a component type that does not
 exist or omit a required prop. Handing the model raw A2UI would trade that
 guarantee for prompting and hope.
@@ -78,10 +76,15 @@ build (cards, a tile row, actions) rather than arbitrary A2UI trees. For a
 dashboard that is the right trade; for a general-purpose agent surface it would
 not be.
 
+Groq does not support streaming while JSON Schema mode is enabled. The model
+therefore returns one strict, validated plan; the backend then sends its A2UI
+messages through the existing SSE transport. The transport remains streaming,
+but cards do not appear one-by-one while the model is still generating.
+
 ## Running it with Docker
 
 ```bash
-cp .env.example .env        # put your OpenAI key in it
+cp .env.example .env        # put your Groq key in it
 docker compose up --build
 ```
 
@@ -104,7 +107,7 @@ generation returns its missing-key fallback.
 
 ## Running it locally, without Docker
 
-**Backend** (needs an OpenAI key):
+**Backend** (needs a Groq key):
 
 ```bash
 cd backend
@@ -243,8 +246,8 @@ Two gotchas that cost real time:
 
 ## Notes
 
-- Set `OPENAI_MODEL` in `.env` to use something other than `gpt-4o-mini`; any
-  model with structured-outputs support works.
+- Set `GROQ_MODEL` in `.env` to use a Groq model other than the default
+  `openai/gpt-oss-120b`; it must support JSON Schema mode.
 - Chart colours are assigned by fixed slot order and validated for colourblind
   separation in both light and dark mode, which is why a series never changes
   colour when another is added.

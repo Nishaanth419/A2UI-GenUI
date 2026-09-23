@@ -1,8 +1,8 @@
 """The block union: everything the model may put in a turn.
 
 Deliberately a bare union, NOT a `Field(discriminator=...)` -- Pydantic renders
-a discriminator as the JSON-Schema `discriminator` keyword, which OpenAI's
-strict structured-outputs mode rejects. The `Literal` type tag on each member
+a discriminator as the JSON-Schema `discriminator` keyword, which strict
+structured-output APIs reject. The `Literal` type tag on each member
 does the discriminating.
 """
 
